@@ -25,7 +25,7 @@ class RecordableSeriesTable
                 Series::query()
                     ->where('user_id', auth()->id())
                     ->where('enabled', true)
-                    ->with(['playlist', 'vodCategory'])
+                    ->with(['playlist', 'category'])
             )
             ->columns([
                 TextColumn::make('name')

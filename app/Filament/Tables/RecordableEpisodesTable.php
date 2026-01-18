@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tables;
 
+use App\Models\Episode;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -12,18 +13,19 @@ class RecordableEpisodesTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->query(fn (): Builder => Episode::query())
             ->modifyQueryUsing(function (Builder $query): Builder {
-                // $arguments = $table->getArguments();
-
                 return $query
-                    ->where('user_id', auth()->id())
+                    ->whereHas('series', function ($q) {
+                        $q->where('user_id', auth()->id());
+                    })
                     ->with(['series.playlist', 'series.category']);
             })
             ->filtersTriggerAction(function ($action) {
                 return $action->button()->label('Filters');
             })
-            ->defaultGroup('season')
-            ->defaultSort('episode_num', 'asc')
+            ->defaultGroup(group: 'series.name')
+            ->defaultSort('season', 'asc')
             ->paginated([15, 25, 50, 100])
             ->defaultPaginationPageOption(15)
             ->columns([

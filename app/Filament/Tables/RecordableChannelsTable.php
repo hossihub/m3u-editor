@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tables;
 
+use App\Models\Channel;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -12,14 +13,11 @@ class RecordableChannelsTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->query(fn (): Builder => Channel::query())
             ->modifyQueryUsing(function (Builder $query): Builder {
-                // $arguments = $table->getArguments();
-
                 return $query
-                    ->where([
-                        ['enabled', true],
-                        ['user_id', auth()->id()],
-                    ])
+                    ->where('enabled', true)
+                    ->where('user_id', auth()->id())
                     ->with(['playlist', 'group']);
             })
             ->filtersTriggerAction(function ($action) {

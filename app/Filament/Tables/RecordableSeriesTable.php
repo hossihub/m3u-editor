@@ -2,7 +2,6 @@
 
 namespace App\Filament\Tables;
 
-use App\Models\Series;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -16,16 +15,18 @@ class RecordableSeriesTable
             ->modifyQueryUsing(function (Builder $query): Builder {
                 // $arguments = $table->getArguments();
 
-                return $query->where('user_id', auth()->id());
+                return $query
+                    ->where([
+                        ['enabled', true],
+                        ['user_id', auth()->id()],
+                    ])
+                    ->with(['playlist', 'category']);
             })
             ->filtersTriggerAction(function ($action) {
                 return $action->button()->label('Filters');
             })
-            ->query(
-                Series::query()
-                    ->where('enabled', true)
-                    ->with(['playlist', 'category'])
-            )
+            ->paginated([15, 25, 50, 100])
+            ->defaultPaginationPageOption(15)
             ->columns([
                 TextColumn::make('name')
                     ->label('Series')

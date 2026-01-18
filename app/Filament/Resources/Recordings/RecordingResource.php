@@ -6,6 +6,9 @@ use App\Filament\Resources\Recordings\Pages\CreateRecording;
 use App\Filament\Resources\Recordings\Pages\EditRecording;
 use App\Filament\Resources\Recordings\Pages\ListRecordings;
 use App\Filament\Resources\Recordings\Pages\ViewRecording;
+use App\Filament\Tables\RecordableChannelsTable;
+use App\Filament\Tables\RecordableEpisodesTable;
+use App\Filament\Tables\RecordableSeriesTable;
 use App\Models\Channel;
 use App\Models\Episode;
 use App\Models\Recording;
@@ -17,8 +20,10 @@ use Filament\Actions\DeleteBulkAction as ActionsDeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\ModalTableSelect;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
@@ -61,39 +66,74 @@ class RecordingResource extends Resource
                     ->live()
                     ->columnSpanFull(),
 
-                Select::make('recordable_id')
+                ModalTableSelect::make('recordable_id')
                     ->label(fn (Get $get) => match ($get('recordable_type')) {
                         Channel::class => 'Channel',
                         Episode::class => 'Episode',
                         Series::class => 'Series',
                         default => 'Item',
                     })
-                    ->options(function (Get $get) {
+                    ->tableConfiguration(function (Get $get) {
+                        return match ($get('recordable_type')) {
+                            Channel::class => RecordableChannelsTable::class,
+                            Episode::class => RecordableEpisodesTable::class,
+                            Series::class => RecordableSeriesTable::class,
+                            default => null,
+                        };
+                    })
+                    ->selectAction(
+                        fn ($action, Get $get) => $action
+                            ->label(match ($get('recordable_type')) {
+                                Channel::class => 'Select channel',
+                                Episode::class => 'Select episode',
+                                Series::class => 'Select series',
+                                default => 'Select item',
+                            })
+                            ->modalHeading(match ($get('recordable_type')) {
+                                Channel::class => 'Search channels',
+                                Episode::class => 'Search episodes',
+                                Series::class => 'Search series',
+                                default => 'Search items',
+                            })
+                            ->modalSubmitActionLabel('Confirm selection')
+                            ->button()
+                    )
+                    ->getOptionLabelUsing(function ($value, Get $get) {
                         $type = $get('recordable_type');
+                        if (! $type || ! $value) {
+                            return $value;
+                        }
+
+                        $record = match ($type) {
+                            Channel::class => Channel::find($value),
+                            Episode::class => Episode::find($value),
+                            Series::class => Series::find($value),
+                            default => null,
+                        };
+
+                        // Channel and Episode use 'title', Series uses 'name'
+                        return match ($type) {
+                            Series::class => $record?->name ?? $value,
+                            default => $record?->title ?? $value,
+                        };
+                    })
+                    ->getOptionLabelsUsing(function (array $values, Get $get) {
+                        $type = $get('recordable_type');
+                        if (! $type || empty($values)) {
+                            return [];
+                        }
 
                         return match ($type) {
-                            Channel::class => Channel::query()
-                                ->where('user_id', auth()->id())
-                                ->where('enabled', true)
-                                ->orderBy('title')
-                                ->pluck('title', 'id'),
-                            Episode::class => Episode::query()
-                                ->whereHas('series', function ($query) {
-                                    $query->where('user_id', auth()->id());
-                                })
-                                ->orderBy('title')
-                                ->pluck('title', 'id'),
-                            Series::class => Series::query()
-                                ->where('user_id', auth()->id())
-                                ->where('enabled', true)
-                                ->orderBy('title')
-                                ->pluck('title', 'id'),
+                            Channel::class => Channel::whereIn('id', $values)->pluck('title', 'id')->toArray(),
+                            Episode::class => Episode::whereIn('id', $values)->pluck('title', 'id')->toArray(),
+                            Series::class => Series::whereIn('id', $values)->pluck('name', 'id')->toArray(),
                             default => [],
                         };
                     })
-                    ->searchable()
+                    ->disabled(fn (Get $get) => ! $get('recordable_type'))
                     ->required()
-                    ->columnSpanFull(),
+                    ->columnSpanFull()
+                    ->helperText(fn (Get $get) => ! $get('recordable_type') ? 'Please select a record type first' : null),
 
                 TextInput::make('title')
                     ->label('Recording Title')
@@ -121,23 +161,38 @@ class RecordingResource extends Resource
                     ->helperText('Defines the output format and quality')
                     ->columnSpan(1),
 
+                Toggle::make('start_now')
+                    ->label('Start Recording Immediately')
+                    ->helperText('Start recording as soon as this is saved')
+                    ->default(false)
+                    ->live()
+                    ->visible(fn (Get $get) => $get('recordable_type') === Channel::class)
+                    ->columnSpan(1),
+
                 DateTimePicker::make('scheduled_start')
                     ->label('Start Time')
-                    ->required()
+                    ->required(fn (Get $get) => ! $get('start_now'))
+                    ->disabled(fn (Get $get) => $get('start_now'))
+                    ->default(fn (Get $get) => $get('start_now') ? now() : null)
                     ->seconds(false)
-                    ->columnSpan(1),
+                    ->visible(fn (Get $get) => $get('recordable_type') === Channel::class)
+                    ->columnSpan(1)
+                    ->helperText(fn (Get $get) => $get('start_now') ? 'Will start immediately' : 'When to start recording'),
 
                 DateTimePicker::make('scheduled_end')
                     ->label('End Time')
                     ->required()
                     ->seconds(false)
-                    ->columnSpan(1),
+                    ->visible(fn (Get $get) => $get('recordable_type') === Channel::class)
+                    ->columnSpan(1)
+                    ->helperText('When to stop recording'),
 
                 TextInput::make('pre_padding_seconds')
                     ->label('Pre-Padding (seconds)')
                     ->numeric()
                     ->default(60)
                     ->helperText('Start recording this many seconds before scheduled start')
+                    ->visible(fn (Get $get) => $get('recordable_type') === Channel::class && ! $get('start_now'))
                     ->columnSpan(1),
 
                 TextInput::make('post_padding_seconds')
@@ -145,6 +200,7 @@ class RecordingResource extends Resource
                     ->numeric()
                     ->default(120)
                     ->helperText('Continue recording this many seconds after scheduled end')
+                    ->visible(fn (Get $get) => $get('recordable_type') === Channel::class)
                     ->columnSpan(1),
 
                 TextInput::make('max_retries')
@@ -159,6 +215,9 @@ class RecordingResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->filtersTriggerAction(function ($action) {
+                return $action->button()->label('Filters');
+            })
             ->defaultSort('scheduled_start', 'desc')
             ->columns([
                 TextColumn::make('title')
@@ -253,8 +312,7 @@ class RecordingResource extends Resource
                     ->hidden(fn (Recording $record) => in_array($record->status, ['recording', 'completed'])),
                 DeleteAction::make()
                     ->hidden(fn (Recording $record) => $record->status === 'recording'),
-            ])
-            ->recordActionsPosition(RecordActionsPosition::BeforeColumns)
+            ], position: RecordActionsPosition::BeforeCells)
             ->toolbarActions([
                 ActionsBulkActionGroup::make([
                     ActionsDeleteBulkAction::make(),

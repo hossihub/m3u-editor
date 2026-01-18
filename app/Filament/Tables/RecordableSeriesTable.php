@@ -1,0 +1,67 @@
+<?php
+
+namespace App\Filament\Tables;
+
+use App\Models\Series;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+
+class RecordableSeriesTable
+{
+    public static function configure(Table $table): Table
+    {
+        return $table
+            ->modifyQueryUsing(function (Builder $query): Builder {
+                // $arguments = $table->getArguments();
+
+                return $query->where('user_id', auth()->id());
+            })
+            ->filtersTriggerAction(function ($action) {
+                return $action->button()->label('Filters');
+            })
+            ->query(
+                Series::query()
+                    ->where('user_id', auth()->id())
+                    ->where('enabled', true)
+                    ->with(['playlist', 'vodCategory'])
+            )
+            ->columns([
+                TextColumn::make('name')
+                    ->label('Series')
+                    ->searchable()
+                    ->sortable(),
+
+                TextColumn::make('playlist.name')
+                    ->label('Playlist')
+                    ->searchable()
+                    ->sortable(),
+
+                TextColumn::make('category.name')
+                    ->label('Category')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(),
+
+                TextColumn::make('episodes_count')
+                    ->label('Episodes')
+                    ->counts('episodes')
+                    ->toggleable(),
+            ])
+            ->filters([
+                SelectFilter::make('playlist_id')
+                    ->label('Playlist')
+                    ->relationship('playlist', 'name')
+                    ->searchable()
+                    ->preload(),
+
+                SelectFilter::make('category_id')
+                    ->label('Category')
+                    ->relationship('category', 'name')
+                    ->searchable()
+                    ->preload(),
+            ])
+            ->defaultSort('name');
+    }
+}

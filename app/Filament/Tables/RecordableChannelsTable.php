@@ -23,7 +23,6 @@ class RecordableChannelsTable
             })
             ->query(
                 Channel::query()
-                    ->where('user_id', auth()->id())
                     ->where('enabled', true)
                     ->with(['playlist', 'group'])
             )
@@ -59,6 +58,7 @@ class RecordableChannelsTable
                 SelectFilter::make('group_id')
                     ->label('Group')
                     ->relationship('group', 'name')
+                    ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->name} [{$record->playlist->name}]")
                     ->searchable()
                     ->preload(),
             ])

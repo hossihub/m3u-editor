@@ -23,9 +23,6 @@ class RecordableEpisodesTable
             })
             ->query(
                 Episode::query()
-                    ->whereHas('series', function ($query) {
-                        $query->where('user_id', auth()->id());
-                    })
                     ->with(['series.playlist', 'series.category'])
             )
             ->columns([
@@ -76,6 +73,7 @@ class RecordableEpisodesTable
                 SelectFilter::make('series_id')
                     ->label('Series')
                     ->relationship('series', 'name')
+                    ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->name} [{$record->playlist->name}]")
                     ->searchable()
                     ->preload(),
             ])

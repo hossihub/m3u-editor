@@ -23,7 +23,6 @@ class RecordableSeriesTable
             })
             ->query(
                 Series::query()
-                    ->where('user_id', auth()->id())
                     ->where('enabled', true)
                     ->with(['playlist', 'category'])
             )
@@ -59,6 +58,7 @@ class RecordableSeriesTable
                 SelectFilter::make('category_id')
                     ->label('Category')
                     ->relationship('category', 'name')
+                    ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->name} [{$record->playlist->name}]")
                     ->searchable()
                     ->preload(),
             ])
